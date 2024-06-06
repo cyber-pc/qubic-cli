@@ -103,3 +103,36 @@ void quotteryPrintActiveBet(const char* nodeIp, const int nodePort);
 void quotteryPrintActiveBetByCreator(const char* nodeIp, const int nodePort, const char* identity);
 void quotteryCancelBet(const char* nodeIp, const int nodePort, const char* seed, const uint32_t betId, const uint32_t scheduledTickOffset);
 void quotteryPublishResult(const char* nodeIp, const int nodePort, const char* seed, const uint32_t betId, const uint32_t winOption, const uint32_t scheduledTickOffset);
+
+// Core function
+void quotteryGetActiveBet(const char* nodeIp, const int nodePort, getActiveBet_output& result);
+
+// Get detail information of a bet ID
+void quotteryGetBetInfo(
+    const char* nodeIp,
+    const int nodePort,
+    int betId,
+    getBetInfo_output& result);
+
+// Join a bet
+void quotteryJoinBet(
+    const char* nodeIp,
+    int nodePort,
+    const char* seed,
+    uint32_t betId,
+    int numberOfBetSlot,
+    uint64_t amountPerSlot,
+    uint8_t option,
+    uint32_t scheduledTickOffset,
+    char* txOuputHash = nullptr,
+    unsigned int* txTick = nullptr);
+
+// Issue a bet
+void quotterySubmitIssueBet(
+    const char* nodeIp,
+    int nodePort,
+    const char* seed,
+    QuotteryissueBet_input betInput,
+    uint32_t scheduledTickOffset,
+    char* txOuputHash = nullptr,
+    unsigned int* txTick = nullptr);
