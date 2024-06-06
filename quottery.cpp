@@ -120,7 +120,104 @@ static uint64_t diffDate(uint8_t A[4], uint8_t B[4]) {
     return dayB-dayA;
 }
 
-void quotteryIssueBet(const char* nodeIp, int nodePort, const char* seed, uint32_t scheduledTickOffset){
+// Temporary duplicate code here
+void quotterySubmitIssueBet(
+    const char* nodeIp,
+    int nodePort,
+    const char* seed,
+    QuotteryissueBet_input betInput,
+    uint32_t scheduledTickOffset,
+    char* txOuputHash,
+    unsigned int* txTick)
+{
+    auto qc = make_qc(nodeIp, nodePort);
+    uint8_t privateKey[32] = {0};
+    uint8_t sourcePublicKey[32] = {0};
+    uint8_t destPublicKey[32] = {0};
+    uint8_t subseed[32] = {0};
+    uint8_t digest[32] = {0};
+    uint8_t signature[64] = {0};
+    char publicIdentity[128] = {0};
+    char txHash[128] = {0};
+    getSubseedFromSeed((uint8_t*)seed, subseed);
+    getPrivateKeyFromSubSeed(subseed, privateKey);
+    getPublicKeyFromPrivateKey(privateKey, sourcePublicKey);
+    const bool isLowerCase = false;
+    getIdentityFromPublicKey(sourcePublicKey, publicIdentity, isLowerCase);
+    ((uint64_t*)destPublicKey)[0] = QUOTTERY_CONTRACT_ID;
+    ((uint64_t*)destPublicKey)[1] = 0;
+    ((uint64_t*)destPublicKey)[2] = 0;
+    ((uint64_t*)destPublicKey)[3] = 0;
+
+    struct {
+        RequestResponseHeader header;
+        Transaction transaction;
+        QuotteryissueBet_input ibi;
+        unsigned char signature[64];
+    } packet;
+    memcpy(&packet.ibi, &betInput, sizeof(QuotteryissueBet_input));
+
+    memcpy(packet.transaction.sourcePublicKey, sourcePublicKey, 32);
+    memcpy(packet.transaction.destinationPublicKey, destPublicKey, 32);
+    {
+        QuotteryFees_output quotteryFee;
+        quotteryGetFees(nodeIp, nodePort, quotteryFee);
+        std::time_t now = time(0);
+        std::tm *gmtm = gmtime(&now);
+        uint8_t year = gmtm->tm_year % 100;
+        uint8_t month = gmtm->tm_mon;
+        uint8_t day = gmtm->tm_mday;
+        uint8_t curDate[4] = {year, month, day, 0};
+        uint64_t diffday = diffDate(curDate, packet.ibi.endDate) + 1;
+        packet.transaction.amount = packet.ibi.maxBetSlotPerOption * packet.ibi.numberOfOption * quotteryFee.feePerSlotPerDay * diffday;
+    }
+
+    LOG("Transaction amount %ll \n", packet.transaction.amount);
+
+    uint32_t currentTick = getTickNumberFromNode(qc);
+    packet.transaction.tick = currentTick + scheduledTickOffset;
+    packet.transaction.inputType = quotteryFuncId::issue;
+    packet.transaction.inputSize = sizeof(QuotteryissueBet_input);
+    KangarooTwelve((unsigned char*)&packet.transaction,
+                   sizeof(packet.transaction) + sizeof(QuotteryissueBet_input),
+                   digest,
+                   32);
+    sign(subseed, sourcePublicKey, digest, signature);
+    memcpy(packet.signature, signature, 64);
+    packet.header.setSize(sizeof(packet));
+    packet.header.zeroDejavu();
+    packet.header.setType(BROADCAST_TRANSACTION);
+
+    LOG("Current tick %u \n", currentTick);
+    LOG("Transaction tick %u \n", packet.transaction.tick);
+
+    qc->sendData((uint8_t *) &packet, packet.header.size());
+    KangarooTwelve((unsigned char*)&packet.transaction,
+                   sizeof(packet.transaction) + sizeof(QuotteryissueBet_input) + SIGNATURE_SIZE,
+                   digest,
+                   32); // recompute digest for txhash
+    getTxHashFromDigest(digest, txHash);
+    LOG("Bet creation has been sent!\n");
+    printReceipt(packet.transaction, txHash, nullptr);
+    LOG("run ./qubic-cli [...] -checktxontick %u %s\n", currentTick + scheduledTickOffset, txHash);
+    LOG("to check your tx confirmation status\n");
+
+    if (txOuputHash)
+    {
+        memcpy(txOuputHash, txHash, 60);
+    }
+    if (txTick)
+    {
+        *txTick = currentTick + scheduledTickOffset;
+    }
+}
+
+void quotteryIssueBet(
+    const char* nodeIp,
+    int nodePort,
+    const char* seed,
+    uint32_t scheduledTickOffset)
+{
     auto qc = make_qc(nodeIp, nodePort);
     uint8_t privateKey[32] = {0};
     uint8_t sourcePublicKey[32] = {0};
@@ -246,7 +343,18 @@ void quotteryIssueBet(const char* nodeIp, int nodePort, const char* seed, uint32
     LOG("to check your tx confirmation status\n");
 }
 
-void quotteryJoinBet(const char* nodeIp, int nodePort, const char* seed, uint32_t betId, int numberOfBetSlot, uint64_t amountPerSlot, uint8_t option, uint32_t scheduledTickOffset){
+void quotteryJoinBet(
+    const char* nodeIp,
+    int nodePort,
+    const char* seed,
+    uint32_t betId,
+    int numberOfBetSlot,
+    uint64_t amountPerSlot,
+    uint8_t option,
+    uint32_t scheduledTickOffset,
+    char* txOuputHash,
+    unsigned int* txTick)
+{
     auto qc = make_qc(nodeIp, nodePort);
     uint8_t privateKey[32] = {0};
     uint8_t sourcePublicKey[32] = {0};
@@ -302,6 +410,15 @@ void quotteryJoinBet(const char* nodeIp, int nodePort, const char* seed, uint32_
     printReceipt(packet.transaction, txHash, nullptr);
     LOG("run ./qubic-cli [...] -checktxontick %u %s\n", currentTick + scheduledTickOffset, txHash);
     LOG("to check your tx confirmation status\n");
+
+    if (txOuputHash)
+    {
+        memcpy(txOuputHash, txHash, 60);
+    }
+    if (txTick)
+    {
+        *txTick = currentTick + scheduledTickOffset;
+    }
 }
 void quotteryGetBetInfo(const char* nodeIp, const int nodePort, int betId, getBetInfo_output& result){
     auto qc = make_qc(nodeIp, nodePort);

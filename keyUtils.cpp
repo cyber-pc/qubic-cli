@@ -4,6 +4,10 @@
 #include "K12AndKeyUtil.h"
 #include "logger.h"
 
+#include "utils.h"
+
+#include <iostream>
+
 bool getSubseedFromSeed(const uint8_t* seed, uint8_t* subseed)
 {
     uint8_t seedBytes[55];
