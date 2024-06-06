@@ -94,12 +94,46 @@ struct cancelBet_input{
 };
 #pragma pop()
 
-void quotteryIssueBet(const char* nodeIp, int nodePort, const char* seed, uint32_t scheduledTickOffset);
 void quotteryPrintBetInfo(const char* nodeIp, const int nodePort, int betId);
 void quotteryPrintBasicInfo(const char* nodeIp, const int nodePort);
-void quotteryJoinBet(const char* nodeIp, int nodePort, const char* seed, uint32_t betId, int numberOfBetSlot, uint64_t amountPerSlot, uint8_t option, uint32_t scheduledTickOffset);
 void quotteryPrintBetOptionDetail(const char* nodeIp, const int nodePort, uint32_t betId, uint32_t betOption);
 void quotteryPrintActiveBet(const char* nodeIp, const int nodePort);
 void quotteryPrintActiveBetByCreator(const char* nodeIp, const int nodePort, const char* identity);
 void quotteryCancelBet(const char* nodeIp, const int nodePort, const char* seed, const uint32_t betId, const uint32_t scheduledTickOffset);
 void quotteryPublishResult(const char* nodeIp, const int nodePort, const char* seed, const uint32_t betId, const uint32_t winOption, const uint32_t scheduledTickOffset);
+
+// Get the basic infomation of quoterry
+void quotteryGetBasicInfo(const char* nodeIp, const int nodePort, qtryBasicInfo_output& result);
+
+// Core function
+void quotteryGetActiveBet(const char* nodeIp, const int nodePort, getActiveBet_output& result);
+
+// Get detail information of a bet ID
+void quotteryGetBetInfo(
+    const char* nodeIp,
+    const int nodePort,
+    int betId,
+    getBetInfo_output& result);
+
+// Join a bet
+void quotteryJoinBet(
+    const char* nodeIp,
+    int nodePort,
+    const char* seed,
+    uint32_t betId,
+    int numberOfBetSlot,
+    uint64_t amountPerSlot,
+    uint8_t option,
+    uint32_t scheduledTickOffset,
+    char* txOuputHash = nullptr,
+    unsigned int* txTick = nullptr);
+
+// Issue a bet
+void quotteryIssueBet(
+    const char* nodeIp,
+    int nodePort,
+    const char* seed,
+    uint32_t scheduledTickOffset,
+    QuotteryissueBet_input* betInput = nullptr,
+    char* txOuputHash = nullptr,
+    unsigned int* txTick = nullptr);

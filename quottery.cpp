@@ -120,7 +120,15 @@ static uint64_t diffDate(uint8_t A[4], uint8_t B[4]) {
     return dayB-dayA;
 }
 
-void quotteryIssueBet(const char* nodeIp, int nodePort, const char* seed, uint32_t scheduledTickOffset){
+void quotteryIssueBet(
+    const char* nodeIp,
+    int nodePort,
+    const char* seed,
+    uint32_t scheduledTickOffset,
+    QuotteryissueBet_input* betInput,
+    char* txOuputHash,
+    unsigned int* txTick)
+{
     auto qc = make_qc(nodeIp, nodePort);
     uint8_t privateKey[32] = {0};
     uint8_t sourcePublicKey[32] = {0};
@@ -148,63 +156,72 @@ void quotteryIssueBet(const char* nodeIp, int nodePort, const char* seed, uint32
     } packet;
     memset(&packet.ibi, 0, sizeof(QuotteryissueBet_input));
 
-    char buff[128] = {0};
-    promptStdin("Enter bet description (32 chars)", buff, 32);
-    memcpy(packet.ibi.betDesc, buff, 32);
-    promptStdin("Enter number of options (valid [2-8])", buff, 1);
-    packet.ibi.numberOfOption = buff[0] - 48;
-    for (int i = 0; i < packet.ibi.numberOfOption; i++){
-        char buff2[128] = {0};
-        sprintf(buff2, "Enter option #%d description (32 chars)", i);
-        promptStdin(buff2, buff, 32);
-        memcpy(packet.ibi.optionDesc + i*32, buff, 32);
-    }
-    promptStdin("Enter number of oracle provider (valid [1-8])", buff, 1);
-    int numberOP = buff[0] - 48;
-    for (int i = 0; i < numberOP; i++){
-        char buff2[128] = {0};
-        uint8_t buf3[32] = {0};
-        sprintf(buff2, "Enter oracle provider #%d ID (60 chars)", i);
-        promptStdin(buff2, buff, 60);
-        getPublicKeyFromIdentity(buff, buf3);
-        memcpy(packet.ibi.oracleProviderId + i * 32, buf3, 32);
-    }
-    for (int i = 0; i < numberOP; i++){
-        char buff2[128] = {0};
-        sprintf(buff2, "Enter fee for oracle provider #%d ID [4 digits number, format ABCD (meaning AB.CD%%)]", i);
-        promptStdin(buff2, buff, 4);
-        uint32_t op_fee = std::atoi(buff);
-        packet.ibi.oracleFees[i] = op_fee;
-    }
+    // If provide the bet input, just copy it
+    if (betInput)
     {
-        promptStdin("Enter bet close date (stop receiving bet date) (Format: YY-MM-DD)", buff, 8);
-        uint8_t year = (buff[0]-48)*10 + (buff[1]-48);
-        uint8_t month = (buff[3]-48)*10 + (buff[4]-48);
-        uint8_t day = (buff[6]-48)*10 + (buff[7]-48);
-        packet.ibi.closeDate[0] = year;
-        packet.ibi.closeDate[1] = month;
-        packet.ibi.closeDate[2] = day;
-        packet.ibi.closeDate[3] = 0;
+        memcpy(&packet.ibi, betInput, sizeof(QuotteryissueBet_input));
     }
+    else // Input by console
     {
-        promptStdin("Enter bet end date (finalize bet date) (Format: YY-MM-DD)", buff, 8);
-        uint8_t year = (buff[0]-48)*10 + (buff[1]-48);
-        uint8_t month = (buff[3]-48)*10 + (buff[4]-48);
-        uint8_t day = (buff[6]-48)*10 + (buff[7]-48);
-        packet.ibi.endDate[0] = year;
-        packet.ibi.endDate[1] = month;
-        packet.ibi.endDate[2] = day;
-        packet.ibi.endDate[3] = 0;
+        char buff[128] = {0};
+        promptStdin("Enter bet description (32 chars)", buff, 32);
+        memcpy(packet.ibi.betDesc, buff, 32);
+        promptStdin("Enter number of options (valid [2-8])", buff, 1);
+        packet.ibi.numberOfOption = buff[0] - 48;
+        for (int i = 0; i < packet.ibi.numberOfOption; i++){
+            char buff2[128] = {0};
+            sprintf(buff2, "Enter option #%d description (32 chars)", i);
+            promptStdin(buff2, buff, 32);
+            memcpy(packet.ibi.optionDesc + i*32, buff, 32);
+        }
+        promptStdin("Enter number of oracle provider (valid [1-8])", buff, 1);
+        int numberOP = buff[0] - 48;
+        for (int i = 0; i < numberOP; i++){
+            char buff2[128] = {0};
+            uint8_t buf3[32] = {0};
+            sprintf(buff2, "Enter oracle provider #%d ID (60 chars)", i);
+            promptStdin(buff2, buff, 60);
+            getPublicKeyFromIdentity(buff, buf3);
+            memcpy(packet.ibi.oracleProviderId + i * 32, buf3, 32);
+        }
+        for (int i = 0; i < numberOP; i++){
+            char buff2[128] = {0};
+            sprintf(buff2, "Enter fee for oracle provider #%d ID [4 digits number, format ABCD (meaning AB.CD%%)]", i);
+            promptStdin(buff2, buff, 4);
+            uint32_t op_fee = std::atoi(buff);
+            packet.ibi.oracleFees[i] = op_fee;
+        }
+        {
+            promptStdin("Enter bet close date (stop receiving bet date) (Format: YY-MM-DD)", buff, 8);
+            uint8_t year = (buff[0]-48)*10 + (buff[1]-48);
+            uint8_t month = (buff[3]-48)*10 + (buff[4]-48);
+            uint8_t day = (buff[6]-48)*10 + (buff[7]-48);
+            packet.ibi.closeDate[0] = year;
+            packet.ibi.closeDate[1] = month;
+            packet.ibi.closeDate[2] = day;
+            packet.ibi.closeDate[3] = 0;
+        }
+        {
+            promptStdin("Enter bet end date (finalize bet date) (Format: YY-MM-DD)", buff, 8);
+            uint8_t year = (buff[0]-48)*10 + (buff[1]-48);
+            uint8_t month = (buff[3]-48)*10 + (buff[4]-48);
+            uint8_t day = (buff[6]-48)*10 + (buff[7]-48);
+            packet.ibi.endDate[0] = year;
+            packet.ibi.endDate[1] = month;
+            packet.ibi.endDate[2] = day;
+            packet.ibi.endDate[3] = 0;
+        }
+        {
+            promptStdin("Enter amount of qus per bet slot", buff, 16);
+            packet.ibi.amountPerSlot = std::atoi(buff);
+        }
+        {
+            promptStdin("Enter max number of bet slot per option", buff, 16);
+            packet.ibi.maxBetSlotPerOption = std::atoi(buff);
+        }
     }
-    {
-        promptStdin("Enter amount of qus per bet slot", buff, 16);
-        packet.ibi.amountPerSlot = std::atoi(buff);
-    }
-    {
-        promptStdin("Enter max number of bet slot per option", buff, 16);
-        packet.ibi.maxBetSlotPerOption = std::atoi(buff);
-    }
-
+    uint64_t debugDiffDay = 0;
+    uint64_t debugfeePerSlotPerDay = 0;
     memcpy(packet.transaction.sourcePublicKey, sourcePublicKey, 32);
     memcpy(packet.transaction.destinationPublicKey, destPublicKey, 32);
     {
@@ -218,8 +235,19 @@ void quotteryIssueBet(const char* nodeIp, int nodePort, const char* seed, uint32
         uint8_t curDate[4] = {year, month, day, 0};
         uint64_t diffday = diffDate(curDate, packet.ibi.endDate) + 1;
         packet.transaction.amount = packet.ibi.maxBetSlotPerOption * packet.ibi.numberOfOption * quotteryBasicInfo.feePerSlotPerDay * diffday;
+        debugDiffDay = diffday;
+        debugfeePerSlotPerDay = quotteryBasicInfo.feePerSlotPerDay;
     }
 
+#if 0
+    LOG("Bet creation info \n");
+    LOG(" - Bet desc: %s \n", packet.ibi.betDesc);
+    LOG(" - Number of options: %u\n", packet.ibi.numberOfOption);
+    LOG(" - Max bet per options: %u\n", packet.ibi.maxBetSlotPerOption);
+    LOG(" - feePerSlotPerDay %llu \n", debugfeePerSlotPerDay);
+    LOG(" - Diffday %llu \n", debugDiffDay);
+    LOG(" - Transaction %lld \n", packet.transaction.amount);
+#endif
 
     uint32_t currentTick = getTickNumberFromNode(qc);
     packet.transaction.tick = currentTick + scheduledTickOffset;
@@ -244,9 +272,29 @@ void quotteryIssueBet(const char* nodeIp, int nodePort, const char* seed, uint32
     printReceipt(packet.transaction, txHash, nullptr);
     LOG("run ./qubic-cli [...] -checktxontick %u %s\n", currentTick + scheduledTickOffset, txHash);
     LOG("to check your tx confirmation status\n");
+
+    if (txOuputHash)
+    {
+        memcpy(txOuputHash, txHash, 60);
+    }
+    if (txTick)
+    {
+        *txTick = currentTick + scheduledTickOffset;
+    }
 }
 
-void quotteryJoinBet(const char* nodeIp, int nodePort, const char* seed, uint32_t betId, int numberOfBetSlot, uint64_t amountPerSlot, uint8_t option, uint32_t scheduledTickOffset){
+void quotteryJoinBet(
+    const char* nodeIp,
+    int nodePort,
+    const char* seed,
+    uint32_t betId,
+    int numberOfBetSlot,
+    uint64_t amountPerSlot,
+    uint8_t option,
+    uint32_t scheduledTickOffset,
+    char* txOuputHash,
+    unsigned int* txTick)
+{
     auto qc = make_qc(nodeIp, nodePort);
     uint8_t privateKey[32] = {0};
     uint8_t sourcePublicKey[32] = {0};
@@ -302,6 +350,15 @@ void quotteryJoinBet(const char* nodeIp, int nodePort, const char* seed, uint32_
     printReceipt(packet.transaction, txHash, nullptr);
     LOG("run ./qubic-cli [...] -checktxontick %u %s\n", currentTick + scheduledTickOffset, txHash);
     LOG("to check your tx confirmation status\n");
+
+    if (txOuputHash)
+    {
+        memcpy(txOuputHash, txHash, 60);
+    }
+    if (txTick)
+    {
+        *txTick = currentTick + scheduledTickOffset;
+    }
 }
 void quotteryGetBetInfo(const char* nodeIp, const int nodePort, int betId, getBetInfo_output& result){
     auto qc = make_qc(nodeIp, nodePort);
