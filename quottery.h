@@ -94,10 +94,8 @@ struct cancelBet_input{
 };
 #pragma pop()
 
-void quotteryIssueBet(const char* nodeIp, int nodePort, const char* seed, uint32_t scheduledTickOffset);
 void quotteryPrintBetInfo(const char* nodeIp, const int nodePort, int betId);
 void quotteryPrintBasicInfo(const char* nodeIp, const int nodePort);
-void quotteryJoinBet(const char* nodeIp, int nodePort, const char* seed, uint32_t betId, int numberOfBetSlot, uint64_t amountPerSlot, uint8_t option, uint32_t scheduledTickOffset);
 void quotteryPrintBetOptionDetail(const char* nodeIp, const int nodePort, uint32_t betId, uint32_t betOption);
 void quotteryPrintActiveBet(const char* nodeIp, const int nodePort);
 void quotteryPrintActiveBetByCreator(const char* nodeIp, const int nodePort, const char* identity);
@@ -128,11 +126,11 @@ void quotteryJoinBet(
     unsigned int* txTick = nullptr);
 
 // Issue a bet
-void quotterySubmitIssueBet(
+void quotteryIssueBet(
     const char* nodeIp,
     int nodePort,
     const char* seed,
-    QuotteryissueBet_input betInput,
     uint32_t scheduledTickOffset,
+    QuotteryissueBet_input* betInput = nullptr,
     char* txOuputHash = nullptr,
     unsigned int* txTick = nullptr);
