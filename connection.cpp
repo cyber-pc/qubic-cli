@@ -177,6 +177,20 @@ int QubicConnection::sendData(uint8_t* buffer, int sz)
 	return sz - size;
 }
 
+QCPtr get_qc(const char* nodeIp, int nodePort, bool reset)
+{
+    thread_local static char node_ip[32];
+    thread_local static int node_port = 0;
+    thread_local static QCPtr instance = nullptr;
+    if (reset || (nullptr == instance) || (node_port != nodePort) || (strcmp(nodeIp, node_ip) != 0) )
+    {
+        instance = std::make_shared<QubicConnection>(nodeIp, nodePort);
+        memcpy(node_ip, nodeIp, sizeof(node_ip));
+        node_port = nodePort;
+    }
+    return instance;
+}
+
 template SpecialCommand QubicConnection::receivePacketAs<SpecialCommand>();
 template SpecialCommandToggleMainModeResquestAndResponse QubicConnection::receivePacketAs<SpecialCommandToggleMainModeResquestAndResponse>();
 template SpecialCommandSetSolutionThresholdResquestAndResponse QubicConnection::receivePacketAs<SpecialCommandSetSolutionThresholdResquestAndResponse>();

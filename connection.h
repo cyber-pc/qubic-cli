@@ -2,12 +2,13 @@
 #include <cstdint>
 #include <vector>
 #include <memory>
+
 // Not thread safe
 class QubicConnection
 {
 public:
 	QubicConnection(const char* nodeIp, int nodePort);
-	~QubicConnection();	
+	~QubicConnection();
 	int receiveData(uint8_t* buffer, int sz);
 	int sendData(uint8_t* buffer, int sz);
     void receiveDataAll(std::vector<uint8_t>& buffer);
@@ -23,3 +24,7 @@ static QCPtr make_qc(const char* nodeIp, int nodePort)
 {
     return std::make_shared<QubicConnection>(nodeIp, nodePort);
 }
+
+// Thread safe. One instance per thread
+// TODO: verify the node ip and port or support multiple instance
+QCPtr get_qc(const char* nodeIp, int nodePort, bool reset = false);

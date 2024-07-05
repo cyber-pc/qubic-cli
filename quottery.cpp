@@ -57,6 +57,16 @@ void quotteryGetBasicInfo(QCPtr& qc, qtryBasicInfo_output& result){
 
 }
 
+void quotteryGetBasicInfo(const char* nodeIp, const int nodePort, qtryBasicInfo_output& result){
+    auto qc = get_qc(nodeIp, nodePort);
+    if (nullptr == qc)
+    {
+        std::cerr << "quotteryGetActiveBet get connection failed.";
+        return;
+    }
+    quotteryGetBasicInfo(qc, result);
+}
+
 void quotteryPrintBasicInfo(const char* nodeIp, const int nodePort){
     qtryBasicInfo_output result;
     memset(&result, 1, sizeof(qtryBasicInfo_output));
@@ -360,7 +370,13 @@ void quotteryJoinBet(const char* nodeIp, int nodePort, const char* seed, uint32_
     LOG("to check your tx confirmation status\n");
 }
 void quotteryGetBetInfo(const char* nodeIp, const int nodePort, int betId, getBetInfo_output& result){
-    auto qc = make_qc(nodeIp, nodePort);
+    auto qc = get_qc(nodeIp, nodePort);
+    if (nullptr == qc)
+    {
+        std::cerr << "quotteryGetActiveBet get connection failed.";
+        return;
+    }
+
     struct {
         RequestResponseHeader header;
         RequestContractFunction rcf;
@@ -461,7 +477,13 @@ void quotteryPrintBetInfo(const char* nodeIp, const int nodePort, int betId){
 
 //  getBetOptionDetail 3
 void quotteryGetBetOptionDetail(const char* nodeIp, const int nodePort, uint32_t betId, uint32_t betOption, getBetOptionDetail_output& result){
-    auto qc = make_qc(nodeIp, nodePort);
+    auto qc = get_qc(nodeIp, nodePort);
+    if (nullptr == qc)
+    {
+        std::cerr << "quotteryGetActiveBet get connection failed.";
+        return;
+    }
+
     struct {
         RequestResponseHeader header;
         RequestContractFunction rcf;
@@ -513,7 +535,13 @@ void quotteryPrintBetOptionDetail(const char* nodeIp, const int nodePort, uint32
 }
 //getActiveBet 4
 void quotteryGetActiveBet(const char* nodeIp, const int nodePort, getActiveBet_output& result){
-    auto qc = make_qc(nodeIp, nodePort);
+    auto qc = get_qc(nodeIp, nodePort);
+    if (nullptr == qc)
+    {
+        std::cerr << "quotteryGetActiveBet get connection failed.";
+        return;
+    }
+
     struct {
         RequestResponseHeader header;
         RequestContractFunction rcf;
