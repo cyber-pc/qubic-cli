@@ -284,6 +284,11 @@ int run(int argc, char* argv[])
             sanityFileExist(g_qutil_sendtomanyv1_payout_list_file);
             qutilSendToManyV1(g_nodeIp, g_nodePort, g_seed, g_qutil_sendtomanyv1_payout_list_file, g_offsetScheduledTick);
             break;
+        case QUTIL_SEND_TO_MANY_PSEUDO_RANDOM:
+            sanityCheckNode(g_nodeIp, g_nodePort);
+            sanityCheckSeed(g_seed);
+            qutilSendToManyPseudoRandom(g_nodeIp, g_nodePort, g_seed, g_qutil_sendtomany_pseudo_random_addresses_count, g_offsetScheduledTick);
+            break;
         case QUTIL_BURN_QUBIC:
             sanityCheckNode(g_nodeIp, g_nodePort);
             sanityCheckSeed(g_seed);

@@ -19,10 +19,14 @@ enum qutilFunctionId{
 enum qutilProcedureId{
     SendToManyV1 = 1,
     BurnQubic = 2,
+    SendToManyPseudoRandom = 3
 };
 struct SendToManyV1_input {
     uint8_t addresses[25][32];
     int64_t amounts[25];
+};
+struct SendToManyPseudoRandom_input {
+    int64_t numAddresses;
 };
 struct BurnQubic_input
 {
@@ -134,6 +138,67 @@ void qutilSendToManyV1(const char* nodeIp, int nodePort, const char* seed, const
                    32); // recompute digest for txhash
     getTxHashFromDigest(digest, txHash);
     LOG("SendToManyV1 tx has been sent!\n");
+    printReceipt(packet.transaction, txHash, nullptr);
+    LOG("run ./qubic-cli [...] -checktxontick %u %s\n", currentTick + scheduledTickOffset, txHash);
+    LOG("to check your tx confirmation status\n");
+}
+
+void qutilSendToManyPseudoRandom(const char* nodeIp, int nodePort, const char* seed, uint32_t numberOfDestAddresses, uint32_t scheduledTickOffset)
+{
+    auto qc = make_qc(nodeIp, nodePort);
+
+    uint8_t privateKey[32] = {0};
+    uint8_t sourcePublicKey[32] = {0};
+    uint8_t destPublicKey[32] = {0};
+    uint8_t subseed[32] = {0};
+    uint8_t digest[32] = {0};
+    uint8_t signature[64] = {0};
+    char publicIdentity[128] = {0};
+    char txHash[128] = {0};
+    getSubseedFromSeed((uint8_t*)seed, subseed);
+    getPrivateKeyFromSubSeed(subseed, privateKey);
+    getPublicKeyFromPrivateKey(privateKey, sourcePublicKey);
+    const bool isLowerCase = false;
+    getIdentityFromPublicKey(sourcePublicKey, publicIdentity, isLowerCase);
+    ((uint64_t*)destPublicKey)[0] = QUTIL_CONTRACT_ID;
+    ((uint64_t*)destPublicKey)[1] = 0;
+    ((uint64_t*)destPublicKey)[2] = 0;
+    ((uint64_t*)destPublicKey)[3] = 0;
+
+    struct {
+        RequestResponseHeader header;
+        Transaction transaction;
+        SendToManyPseudoRandom_input stm;
+        unsigned char signature[64];
+    } packet;
+
+    memset(&packet.stm, 0, sizeof(SendToManyPseudoRandom_input));
+    packet.transaction.amount = 0;
+    packet.stm.numAddresses = numberOfDestAddresses;
+
+    memcpy(packet.transaction.sourcePublicKey, sourcePublicKey, 32);
+    memcpy(packet.transaction.destinationPublicKey, destPublicKey, 32);
+    uint32_t currentTick = getTickNumberFromNode(qc);
+    packet.transaction.tick = currentTick + scheduledTickOffset;
+    packet.transaction.inputType = qutilProcedureId::SendToManyPseudoRandom;
+    packet.transaction.inputSize = sizeof(SendToManyPseudoRandom_input);
+    KangarooTwelve((unsigned char*)&packet.transaction,
+                   sizeof(packet.transaction) + sizeof(SendToManyPseudoRandom_input),
+                   digest,
+                   32);
+    sign(subseed, sourcePublicKey, digest, signature);
+    memcpy(packet.signature, signature, 64);
+    packet.header.setSize(sizeof(packet));
+    packet.header.zeroDejavu();
+    packet.header.setType(BROADCAST_TRANSACTION);
+
+    qc->sendData((uint8_t *) &packet, packet.header.size());
+    KangarooTwelve((unsigned char*)&packet.transaction,
+                   sizeof(packet.transaction) + sizeof(SendToManyPseudoRandom_input) + SIGNATURE_SIZE,
+                   digest,
+                   32); // recompute digest for txhash
+    getTxHashFromDigest(digest, txHash);
+    LOG("SendToManyPseudoRandom tx has been sent!\n");
     printReceipt(packet.transaction, txHash, nullptr);
     LOG("run ./qubic-cli [...] -checktxontick %u %s\n", currentTick + scheduledTickOffset, txHash);
     LOG("to check your tx confirmation status\n");
