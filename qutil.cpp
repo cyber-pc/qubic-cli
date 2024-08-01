@@ -143,7 +143,7 @@ void qutilSendToManyV1(const char* nodeIp, int nodePort, const char* seed, const
     LOG("to check your tx confirmation status\n");
 }
 
-void qutilSendToManyPseudoRandom(const char* nodeIp, int nodePort, const char* seed, uint32_t numberOfDestAddresses, uint32_t scheduledTickOffset)
+void qutilSendToManyBenchmark(const char* nodeIp, int nodePort, const char* seed, uint32_t numberOfDestAddresses, uint32_t scheduledTickOffset)
 {
     auto qc = make_qc(nodeIp, nodePort);
 
@@ -173,7 +173,7 @@ void qutilSendToManyPseudoRandom(const char* nodeIp, int nodePort, const char* s
     } packet;
 
     memset(&packet.stm, 0, sizeof(SendToManyPseudoRandom_input));
-    packet.transaction.amount = 0;
+    packet.transaction.amount = numberOfDestAddresses * 300;
     packet.stm.numAddresses = numberOfDestAddresses;
 
     memcpy(packet.transaction.sourcePublicKey, sourcePublicKey, 32);

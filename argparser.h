@@ -39,7 +39,7 @@ void print_help(){
     printf("\t\tPerform a standard transaction to sendData <AMOUNT> qubic to <TARGET_IDENTITY> in a specific <TICK>. A valid private key and node ip/port are required.\n");
     printf("\t-qutilsendtomanyv1 <FILE>\n");
     printf("\t\tPerforms multiple transaction within in one tick. <FILE> must contain one ID and amount (space seperated) per line. Max 25 transaction. Fees apply! valid private key and node ip/port are required.\n");
-    printf("\t-qutilsendtomanypseudorandom <AMOUNT_OF_ADDRESSES>\n");
+    printf("\t-qutilsendtomanybenchmark <AMOUNT_OF_ADDRESSES>\n");
     printf("\t\tPerforms multiple transaction within in one tick to random amount of address and qubics. Valid private key and node ip/port are required.\n");
     printf("\t-qutilburnqubic <AMOUNT>\n");
     printf("\t\tPerforms burning qubic, valid private key and node ip/port are required.\n");
@@ -688,10 +688,10 @@ void parseArgument(int argc, char** argv){
             CHECK_OVER_PARAMETERS
             break;
         }
-        if(strcmp(argv[i], "-qutilsendtomanypseudorandom") == 0)
+        if(strcmp(argv[i], "-qutilsendtomanybenchmark") == 0)
         {
-            g_cmd = QUTIL_SEND_TO_MANY_PSEUDO_RANDOM;
-            g_qutil_sendtomany_pseudo_random_addresses_count = charToNumber(argv[i + 1]);
+            g_cmd = QUTIL_SEND_TO_MANY_BENCHMARK;
+            g_qutil_sendtomany_benchmark_addresses_count = charToNumber(argv[i + 1]);
             i+=2;
             CHECK_OVER_PARAMETERS
             break;

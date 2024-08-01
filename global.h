@@ -66,6 +66,6 @@ uint64_t g_quottery_amount_per_bet_slot;
 uint32_t g_quottery_picked_option;
 
 char* g_qutil_sendtomanyv1_payout_list_file = nullptr;
-uint32_t g_qutil_sendtomany_pseudo_random_addresses_count = 0;
+uint32_t g_qutil_sendtomany_benchmark_addresses_count = 0;
 
 uint64_t g_get_log_passcode[4] = {0};
