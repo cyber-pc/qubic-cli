@@ -289,6 +289,11 @@ int run(int argc, char* argv[])
             sanityCheckSeed(g_seed);
             qutilSendToManyBenchmark(g_nodeIp, g_nodePort, g_seed, g_qutil_sendtomany_benchmark_addresses_count, 5);
             break;
+        case QUTIL_CONFIG_BENCHMARK:
+            sanityCheckNode(g_nodeIp, g_nodePort);
+            sanityCheckSeed(g_seed);
+            qutilConfigBenchmark(g_nodeIp, g_nodePort, g_seed, g_qutil_sendtomany_benchmark_addresses_count, 5);
+            break;
         case QUTIL_BURN_QUBIC:
             sanityCheckNode(g_nodeIp, g_nodePort);
             sanityCheckSeed(g_seed);
