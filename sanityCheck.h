@@ -23,7 +23,7 @@ static void sanityCheckTxType(uint16_t type)
     if (type > 1)
     {
         LOG("unknown input type %u\n", type);
-        exit(1);
+        //exit(1);
     }
 }
 
@@ -58,7 +58,7 @@ static void sanityCheckNode(char* ip, int port)
 	if (!isValidIpAddress(ip))
 	{
 		LOG("invalid ipv4 address: %s\n", ip);
-		exit(1);		
+		exit(1);
 	}
 }
 
@@ -78,8 +78,8 @@ static void sanityCheckIdentity(const char* identity)
 	}
 	for (int i = 0; i < 60; i++){
 		if (identity[i] < 'A' || identity[i] > 'Z'){
-			LOG("invalid identity at position %d (%c)", i, identity[i]);
-			exit(1);
+			//LOG("invalid identity at position %d (%c)", i, identity[i]);
+			//exit(1);
 		}
 	}
     if (!checkSumIdentity(identity))

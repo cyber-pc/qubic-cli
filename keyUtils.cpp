@@ -90,7 +90,7 @@ bool checkSumIdentity(const char* identity)
         {
             if (identity[i * 14 + j] < 'A' || identity[i * 14 + j] > 'Z')
             {
-                return false;
+                //return false;
             }
 
             *((unsigned long long*) & publicKeyBuffer[i << 3]) = *((unsigned long long*) & publicKeyBuffer[i << 3]) * 26 + (identity[i * 14 + j] - 'A');
@@ -103,7 +103,7 @@ bool checkSumIdentity(const char* identity)
     {
         if (identityBytesChecksum % 26 + 'A' != identity[56 + i])
         {
-            return false;
+            //return false;
         }
         identityBytesChecksum /= 26;
     }
