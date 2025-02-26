@@ -76,27 +76,27 @@ Command:
 [NODE COMMANDS]
 	-getcurrenttick
 		Show current tick information of a node
-	-sendspecialcommand <COMMAND_IN_NUMBER> 
-		Perform a special command to node, valid private key and node ip/port are required.	
+	-sendspecialcommand <COMMAND_IN_NUMBER>
+		Perform a special command to node, valid private key and node ip/port are required.
 	-togglemainaux <MODE_0> <Mode_1>
-		Remotely toggle Main/Aux mode on node,valid private key and node ip/port are required.	
-		<MODE_0> and <MODE_1> value are: MAIN or AUX	
-	-setsolutionthreshold <EPOCH> <SOLUTION_THRESHOLD> 
-		Remotely set solution threshold for future epoch,valid private key and node ip/port are required.	
+		Remotely toggle Main/Aux mode on node,valid private key and node ip/port are required.
+		<MODE_0> and <MODE_1> value are: MAIN or AUX
+	-setsolutionthreshold <EPOCH> <SOLUTION_THRESHOLD>
+		Remotely set solution threshold for future epoch,valid private key and node ip/port are required.
 	-refreshpeerlist
-		(equivalent to F4) Remotely refresh the peer list of node, all current connections will be closed after this command is sent, valid private key and node ip/port are required.	
+		(equivalent to F4) Remotely refresh the peer list of node, all current connections will be closed after this command is sent, valid private key and node ip/port are required.
 	-forcenexttick
-		(equivalent to F5) Remotely force next tick on node to be empty, valid private key and node ip/port are required.	
+		(equivalent to F5) Remotely force next tick on node to be empty, valid private key and node ip/port are required.
 	-reissuevote
-		(equivalent to F9) Remotely re-issue (re-send) vote on node, valid private key and node ip/port are required.	
+		(equivalent to F9) Remotely re-issue (re-send) vote on node, valid private key and node ip/port are required.
 	-sendrawpacket <DATA_IN_HEX> <SIZE>
 		Send a raw packet to nodeip. Valid node ip/port are required.
 	-synctime
-		Sync node time with local time, valid private key and node ip/port are required. Make sure that your local time is synced (with NTP)!	
+		Sync node time with local time, valid private key and node ip/port are required. Make sure that your local time is synced (with NTP)!
 	-getminingscoreranking
-		Get current mining score ranking. Valid private key and node ip/port are required.	
+		Get current mining score ranking. Valid private key and node ip/port are required.
 	-getvotecountertx <COMPUTOR_LIST_FILE> <TICK>
-		Get vote counter transaction of a tick: showing how many votes per ID that this tick leader saw from (<TICK>-675-3) to (<TICK>-3) 	
+		Get vote counter transaction of a tick: showing how many votes per ID that this tick leader saw from (<TICK>-675-3) to (<TICK>-3)
 
 [QX COMMANDS]
 	-qxgetfee
@@ -200,11 +200,11 @@ Command:
 	-qvaultchangeauthaddress <NUMBER_OF_CHANGED_ADDRESS>
 		Change the authaddress using multisig address. <NUMBER_OF_CHANGED_ADDRESS> is the one of (1, 2, 3).
 	-qvaultsubmitfees <NEW_QCAPHOLDER_PERMILLE> <NEW_REINVESTING_PERMILLE> <NEW_DEV_PERMILLE>
-		Submit the new permilles for QcapHolders, Reinvesting, Development using multisig address. the sum of 3 permilles should be 970 because the permille of shareHolder is 30. 
+		Submit the new permilles for QcapHolders, Reinvesting, Development using multisig address. the sum of 3 permilles should be 970 because the permille of shareHolder is 30.
 	-qvaultchangefees <NEW_QCAPHOLDER_PERMILLE> <NEW_REINVESTING_PERMILLE> <NEW_DEV_PERMILLE>
 		Change the permilles for QcapHolders, Reinvesting, Development using multisig address. the sum of 3 permilles should be 970 because the permille of shareHolder is 30. Get the locked amount that the user <IDENTITY> locked in the epoch <EPOCH>.
 	-qvaultsubmitreinvestingaddress <NEW_ADDRESS>
-		Submit the new reinvesting address using multisig address. 
+		Submit the new reinvesting address using multisig address.
 	-qvaultchangereinvestingaddress <NEW_ADDRESS>
 		Change the address using multisig address. <NEW_ADDRESS> should be already submitted by -qvaultsubmitreinvestingaddress command.
 	-qvaultsubmitadminaddress <NEW_ADDRESS>
@@ -311,3 +311,38 @@ Check tx on online:
 More information, please read the help. `./qubic-cli -help`
 
 #### NOTE: PROPER ACTIONS are needed if you use this tool as a replacement for qubic wallet. Please use it with caution.
+
+### Docker
+
+#### Build
+
+- In summary, it will generate 3 Docker images
+
+  - (1) qubic-cli-dev:latest : dev environment to build the final image
+  - (2) qubic-cli-rt:latest : runtime environment, the compiled qubic-cli will be copy into this Docker image
+  - (3) qubic-cli:latest: the qubic-cli image
+
+The reason of 3 Docker images is reducing the size of qubic-cli image which only need runtime library
+
+```
+cd docker
+chmod +x ./build_docker.sh
+./build_docker.sh
+```
+
+#### Run
+
+- Interactive mode
+```
+docker run --rm -it qubic-cli:latest bash
+
+# Continue to execute your commands
+```
+
+- Bash
+```
+docker run --rm -it qubic-cli:latest bash -c "your_command"
+
+# Example
+docker run --rm qubic-cli:latest bash -c "./qubic-cli -seed aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -showkeys"
+```
