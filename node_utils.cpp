@@ -859,6 +859,133 @@ void getTickDataToFile(const char* nodeIp, const int nodePort, uint32_t requeste
     LOG("Tick data and tick transactions have been written to %s\n", fileName);
 }
 
+static bool isContractDestination(const unsigned char* destPublicKey)
+{
+    // Contract addresses have first 8 bytes as little-endian index (0 .. CONTRACT_COUNT-1),
+    // remaining 24 bytes are zero.
+    uint64_t index = 0;
+    memcpy(&index, destPublicKey, 8);
+    if (index > (uint64_t)(CONTRACT_COUNT - 1))
+        return false;
+    uint8_t zeros[24] = {0};
+    return memcmp(destPublicKey + 8, zeros, 24) == 0;
+}
+
+static const char* classifyTransaction(const Transaction& tx)
+{
+    if (tx.inputType != 0)
+        return "Contract";
+    if (isContractDestination(tx.destinationPublicKey))
+        return "Contract";
+    return "Transfer";
+}
+
+void getTickTransactionsToFile(const char* nodeIp, const int nodePort, uint32_t requestedTick, const char* fileName)
+{
+    auto qc = std::make_shared<QubicConnection>(nodeIp, nodePort);
+    auto td = std::make_unique<TickData>();
+    if (!getTickData(nodeIp, nodePort, requestedTick, *td))
+    {
+        return;
+    }
+    if (td->epoch == 0)
+    {
+        LOG("Tick %u not in current epoch or in the future\n", requestedTick);
+        return;
+    }
+
+    int numTx = 0;
+    uint8_t all_zero[32] = {0};
+    for (numTx = NUMBER_OF_TRANSACTIONS_PER_TICK; numTx > 0; numTx--)
+    {
+        if (memcmp(all_zero, td->transactionDigests[numTx-1], 32) != 0) break;
+    }
+
+    LOG("Tick: %u | Epoch: %u | Transaction digests: %d\n", requestedTick, td->epoch, numTx);
+
+    if (numTx == 0)
+    {
+        LOG("No transactions in this tick.\n");
+        return;
+    }
+
+    auto txs = std::make_unique<std::vector<Transaction>>();
+    txs->reserve(NUMBER_OF_TRANSACTIONS_PER_TICK);
+    auto txHashes = std::make_unique<std::vector<TxhashStruct>>();
+    txHashes->reserve(NUMBER_OF_TRANSACTIONS_PER_TICK);
+    auto extraData = std::make_unique<std::vector<ExtraDataStruct>>();
+    extraData->reserve(NUMBER_OF_TRANSACTIONS_PER_TICK);
+    auto signatures = std::make_unique<std::vector<SignatureStruct>>();
+    signatures->reserve(NUMBER_OF_TRANSACTIONS_PER_TICK);
+
+    getTickTransactions(qc, requestedTick, numTx, *txs, txHashes.get(), extraData.get(), signatures.get());
+
+    // Write binary file (same format as getTickDataToFile for compatibility)
+    FILE* f = fopen(fileName, "wb");
+    if (!f)
+    {
+        LOG("Failed to open file %s for writing\n", fileName);
+        return;
+    }
+    fwrite(td.get(), 1, sizeof(TickData), f);
+
+    int validCount = 0;
+    int contractCount = 0;
+    int transferCount = 0;
+
+    for (size_t i = 0; i < txs->size(); i++)
+    {
+        Transaction& tx = txs->at(i);
+
+        if (isArrayZero((uint8_t*)&tx, sizeof(Transaction)))
+            continue;
+
+        // Write to file: tx + extra data + signature
+        fwrite(&tx, 1, sizeof(Transaction), f);
+        if (tx.inputSize != 0)
+        {
+            fwrite(extraData->at(i).vecU8.data(), 1, tx.inputSize, f);
+        }
+        fwrite(signatures->at(i).sig, 1, SIGNATURE_SIZE, f);
+
+        // Print transaction details
+        validCount++;
+        const char* txType = classifyTransaction(tx);
+        if (strcmp(txType, "Contract") == 0) contractCount++;
+        else transferCount++;
+
+        char sourceIdentity[128] = {0};
+        char dstIdentity[128] = {0};
+        char txHashClean[128] = {0};
+        getIdentityFromPublicKey(tx.sourcePublicKey, sourceIdentity, false);
+        getIdentityFromPublicKey(tx.destinationPublicKey, dstIdentity, false);
+        memcpy(txHashClean, txHashes->at(i).hash, 60);
+
+        LOG("--- TX #%d [%s] ---\n", validCount, txType);
+        LOG("  TxHash:     %s\n", txHashClean);
+        LOG("  From:       %s\n", sourceIdentity);
+        LOG("  To:         %s\n", dstIdentity);
+        LOG("  Amount:     %lld\n", tx.amount);
+        LOG("  Tick:       %u\n", tx.tick);
+        LOG("  InputType:  %u\n", tx.inputType);
+        LOG("  InputSize:  %u\n", tx.inputSize);
+        if (tx.inputSize > 0 && !extraData->at(i).vecU8.empty())
+        {
+            char hex_string[MAX_INPUT_SIZE * 2 + 1] = {0};
+            for (int j = 0; j < tx.inputSize; j++)
+                snprintf(hex_string + j * 2, 3, "%02x", extraData->at(i).vecU8[j]);
+            LOG("  ExtraData:  %s\n", hex_string);
+        }
+    }
+
+    fclose(f);
+
+    LOG("\n=== Summary ===\n");
+    LOG("Tick: %u | Valid TXs: %d | Contract: %d | Transfer: %d\n",
+        requestedTick, validCount, contractCount, transferCount);
+    LOG("Transaction data written to %s\n", fileName);
+}
+
 void readTickDataFromFile(const char* fileName, TickData& td,
                           std::vector<Transaction>& txs,
                           std::vector<ExtraDataStruct>* extraData,

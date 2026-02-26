@@ -123,6 +123,10 @@ int run(int argc, char* argv[])
             sanityCheckNode(g_nodeIp, g_nodePort);
             getTickDataToFile(g_nodeIp, g_nodePort, g_requestedTickNumber, g_requestedFileName);
             break;
+        case GET_TICK_TRANSACTIONS:
+            sanityCheckNode(g_nodeIp, g_nodePort);
+            getTickTransactionsToFile(g_nodeIp, g_nodePort, g_requestedTickNumber, g_requestedFileName);
+            break;
         case GET_QUORUM_TICK:
             sanityCheckNode(g_nodeIp, g_nodePort);
             getQuorumTick(g_nodeIp, g_nodePort, g_requestedTickNumber, g_requestedFileName);
