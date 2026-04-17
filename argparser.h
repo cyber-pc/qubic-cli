@@ -99,6 +99,18 @@ void print_help()
     printf("\t\tFetch and display all transactions for a tick with classification (Contract/Transfer), and write transaction data to a file for later use. Valid node ip/port are required.\n");
     printf("\t-getquorumtick <COMP_LIST_FILE> <TICK_NUMBER>\n");
     printf("\t\tGet quorum tick data, the summary of quorum tick will be printed, <COMP_LIST_FILE> is fetched by command -getcomputorlist. valid node ip/port are required.\n");
+    printf("\t-checkvotesalt <COMP_LIST_FILE> <TICK_NUMBER> [RTD_HYPOTHESIS]\n");
+    printf("\t\tGeneral vote-split diagnosis tool. Fetches tick N and tick N+1 votes and groups them by EVERY\n");
+    printf("\t\tdirectly-comparable digest field: prevResourceTestingDigest, prevTransactionBodyDigest, prevSpectrumDigest,\n");
+    printf("\t\tprevUniverseDigest, prevComputerDigest, transactionDigest, and expectedNextTickTransactionDigest.\n");
+    printf("\t\tEach component is analyzed independently, so splits on any consensus dimension surface directly.\n");
+    printf("\t\tThe 451-alignment quorum rule is auto-checked per component -- output flags which components are 'FINALIZED'\n");
+    printf("\t\t(must not be erased via force-empty) and which are safe to skip.\n");
+    printf("\t\tInterpretation: splits in tick N's prev* = prior divergence; splits in tick N+1's prev* = divergence DURING tick N;\n");
+    printf("\t\tsplits in transactionDigest = double tick data from leader; splits in expectedNextTickTransactionDigest = tx set disagreement.\n");
+    printf("\t\tRTD_HYPOTHESIS is an OPTIONAL fallback for cases where tick N+1 has no votes at all (network stuck immediately after tick N).\n");
+    printf("\t\tSupplied as uint32 (decimal or 0x-hex). Computes K12(pubkey || hypothesis, 4) per computor and compares against\n");
+    printf("\t\tsaltedResourceTestingDigest of tick N. Run twice with different values to bucket both sides of an RTD-only split.\n");
     printf("\t-getcomputorlist <OUTPUT_FILE_NAME>\n");
     printf("\t\tGet computor list of the current epoch. Feed this data to -readtickdata to verify tick data. valid node ip/port are required.\n");
     printf("\t-getnodeiplist\n");
@@ -843,6 +855,40 @@ void parseArgument(int argc, char** argv)
             g_requestedFileName = argv[i + 1];
             g_requestedTickNumber = uint32_t(charToNumber(argv[i+2]));
             i+=3;
+            CHECK_OVER_PARAMETERS
+            break;
+        }
+        if (strcmp(argv[i], "-checkvotesalt") == 0)
+        {
+            // -checkvotesalt <COMP_LIST_FILE> <TICK_NUMBER> [RTD_HYPOTHESIS]
+            // RTD_HYPOTHESIS is optional. If given, it is parsed as a uint32 (decimal
+            // or 0x-prefixed hex). When present, votes are grouped by whether their
+            // saltedResourceTestingDigest matches K12(pubkey || hypothesis, 4).
+            // When absent, all unique saltedResourceTestingDigest values are dumped
+            // per computor so the caller can spot unique-value groupings.
+            CHECK_NUMBER_OF_PARAMETERS(2)
+            g_cmd = CHECK_VOTE_SALT;
+            g_requestedFileName = argv[i + 1];
+            g_requestedTickNumber = uint32_t(charToNumber(argv[i + 2]));
+            g_checkVoteSaltHasHypothesis = false;
+            int consumed = 3;
+            if (i + 3 < argc && argv[i + 3][0] != '-')
+            {
+                const char* h = argv[i + 3];
+                unsigned long long parsed;
+                if (h[0] == '0' && (h[1] == 'x' || h[1] == 'X'))
+                {
+                    parsed = std::strtoull(h + 2, nullptr, 16);
+                }
+                else
+                {
+                    parsed = std::strtoull(h, nullptr, 10);
+                }
+                g_checkVoteSaltRtdHypothesis = (uint32_t)parsed;
+                g_checkVoteSaltHasHypothesis = true;
+                consumed = 4;
+            }
+            i += consumed;
             CHECK_OVER_PARAMETERS
             break;
         }

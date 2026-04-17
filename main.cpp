@@ -131,6 +131,12 @@ int run(int argc, char* argv[])
             sanityCheckNode(g_nodeIp, g_nodePort);
             getQuorumTick(g_nodeIp, g_nodePort, g_requestedTickNumber, g_requestedFileName);
             break;
+        case CHECK_VOTE_SALT:
+            sanityCheckNode(g_nodeIp, g_nodePort);
+            sanityFileExist(g_requestedFileName);
+            checkVoteSalt(g_nodeIp, g_nodePort, g_requestedTickNumber, g_requestedFileName,
+                          g_checkVoteSaltHasHypothesis, g_checkVoteSaltRtdHypothesis);
+            break;
         case READ_TICK_DATA:
             sanityFileExist(g_requestedFileName);
             sanityFileExist(g_requestedFileName2);

@@ -54,6 +54,10 @@ uint32_t g_IPOContractIndex = 0;
 uint16_t g_makeIPOBidNumberOfShare = 0;
 uint64_t g_makeIPOBidPricePerShare = 0;
 
+// checkvotesalt
+uint32_t g_checkVoteSaltRtdHypothesis = 0;
+bool g_checkVoteSaltHasHypothesis = false;
+
 // qx
 uint32_t g_requestedTickNumber = 0;
 uint32_t g_offsetScheduledTick = DEFAULT_SCHEDULED_TICK_OFFSET;

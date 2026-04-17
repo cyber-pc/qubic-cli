@@ -14,6 +14,7 @@ int _GetInputDataFromTxHash(QCPtr& qc, const char* txHash, uint8_t* outData, int
 int _GetTxInfo(QCPtr& qc, const char* txHash);
 int getTxInfo(const char* nodeIp, const int nodePort, const char* txHash);
 void getQuorumTick(const char* nodeIp, const int nodePort, uint32_t requestedTick, const char* compFileName);
+void checkVoteSalt(const char* nodeIp, const int nodePort, uint32_t requestedTick, const char* compFileName, bool hasHypothesis, uint32_t rtdHypothesis);
 bool getTickData(QCPtr qc, const uint32_t tick, TickData& result);
 void getTickDataToFile(const char* nodeIp, const int nodePort, uint32_t requestedTick, const char* fileName);
 void getTickTransactionsToFile(const char* nodeIp, const int nodePort, uint32_t requestedTick, const char* fileName);

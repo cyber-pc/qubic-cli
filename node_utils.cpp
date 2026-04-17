@@ -813,6 +813,428 @@ void getQuorumTick(const char* nodeIp, const int nodePort, uint32_t requestedTic
     }
 }
 
+// Helper: signature-verify a vector of votes against a computor list, return only valid ones.
+static std::vector<Tick> filterValidVotes(const std::vector<Tick>& votes, const BroadcastComputors& bc, const char* label)
+{
+    std::vector<Tick> valid;
+    valid.reserve(votes.size());
+    for (size_t i = 0; i < votes.size(); ++i)
+    {
+        uint8_t digest[32] = {0};
+        Tick v = votes[i];
+        int cid = v.computorIndex;
+        if (cid < 0 || cid >= NUMBER_OF_COMPUTORS)
+        {
+            LOG("[%s] Vote %zu has invalid computorIndex %d, skipping\n", label, i, cid);
+            continue;
+        }
+        v.computorIndex ^= Tick::type();
+        KangarooTwelve(reinterpret_cast<uint8_t*>(&v), sizeof(Tick) - SIGNATURE_SIZE, digest, 32);
+        v.computorIndex ^= Tick::type();
+        if (!verify(bc.computors.publicKeys[v.computorIndex], digest, v.signature))
+        {
+            LOG("[%s] Vote %zu (cid %d) failed signature verification\n", label, i, v.computorIndex);
+            continue;
+        }
+        valid.push_back(v);
+    }
+    return valid;
+}
+
+// Helper: print a computor index list compactly (16 per line).
+static void printCidList(const std::vector<int>& cids)
+{
+    for (size_t i = 0; i < cids.size(); ++i)
+    {
+        LOG("%d", cids[i]);
+        if (i + 1 < cids.size()) LOG(", ");
+        if ((i + 1) % 16 == 0 && i + 1 < cids.size()) LOG("\n  ");
+    }
+    LOG("\n");
+}
+
+// The Tick struct carries directly-comparable digest fields:
+//   prevResourceTestingDigest       : uint32 (RTD before this tick = post-exec of prior tick)
+//   prevTransactionBodyDigest       : uint32
+//   prevSpectrumDigest              : 32 bytes
+//   prevUniverseDigest              : 32 bytes
+//   prevComputerDigest              : 32 bytes
+//   transactionDigest               : 32 bytes (this tick's tx set)
+//   expectedNextTickTransactionDigest : 32 bytes (vote on next tick's tx set)
+// Grouping votes by any of these directly identifies splits on that component.
+// Salted fields are per-computor and not directly comparable, so they are handled
+// separately via hypothesis mode.
+enum DigestField
+{
+    DF_PREV_RTD,
+    DF_PREV_TX_BODY,
+    DF_PREV_SPECTRUM,
+    DF_PREV_UNIVERSE,
+    DF_PREV_COMPUTER,
+    DF_TRANSACTION,
+    DF_EXPECTED_NEXT_TX,
+    DF_COUNT
+};
+
+static const char* digestFieldName(DigestField f)
+{
+    switch (f)
+    {
+        case DF_PREV_RTD:        return "prevResourceTestingDigest";
+        case DF_PREV_TX_BODY:    return "prevTransactionBodyDigest";
+        case DF_PREV_SPECTRUM:   return "prevSpectrumDigest";
+        case DF_PREV_UNIVERSE:   return "prevUniverseDigest";
+        case DF_PREV_COMPUTER:   return "prevComputerDigest";
+        case DF_TRANSACTION:     return "transactionDigest";
+        case DF_EXPECTED_NEXT_TX:return "expectedNextTickTransactionDigest";
+        default:                 return "?";
+    }
+}
+
+struct VoteGroup
+{
+    std::string keyDisplay;
+    std::vector<int> cids;
+};
+
+static void extractDigestKey(const Tick& v, DigestField f, uint8_t* outKey)
+{
+    memset(outKey, 0, 32);
+    switch (f)
+    {
+        case DF_PREV_RTD:
+            memcpy(outKey, &v.prevResourceTestingDigest, sizeof(v.prevResourceTestingDigest));
+            return;
+        case DF_PREV_TX_BODY:
+            memcpy(outKey, &v.prevTransactionBodyDigest, sizeof(v.prevTransactionBodyDigest));
+            return;
+        case DF_PREV_SPECTRUM:
+            memcpy(outKey, v.prevSpectrumDigest, 32);
+            return;
+        case DF_PREV_UNIVERSE:
+            memcpy(outKey, v.prevUniverseDigest, 32);
+            return;
+        case DF_PREV_COMPUTER:
+            memcpy(outKey, v.prevComputerDigest, 32);
+            return;
+        case DF_TRANSACTION:
+            memcpy(outKey, v.transactionDigest, 32);
+            return;
+        case DF_EXPECTED_NEXT_TX:
+            memcpy(outKey, v.expectedNextTickTransactionDigest, 32);
+            return;
+        default:
+            return;
+    }
+}
+
+static std::string formatDigestKey(DigestField f, const uint8_t* key)
+{
+    char buf[128];
+    if (f == DF_PREV_RTD || f == DF_PREV_TX_BODY)
+    {
+        uint32_t v;
+        memcpy(&v, key, 4);
+        snprintf(buf, sizeof(buf), "%u (0x%08x)", v, v);
+    }
+    else
+    {
+        // First 8 bytes as short fingerprint
+        snprintf(buf, sizeof(buf),
+                 "%02x%02x%02x%02x%02x%02x%02x%02x...",
+                 key[0], key[1], key[2], key[3],
+                 key[4], key[5], key[6], key[7]);
+    }
+    return std::string(buf);
+}
+
+static std::vector<VoteGroup> groupByDigestField(const std::vector<Tick>& votes, DigestField f)
+{
+    struct Bucket
+    {
+        uint8_t key[32];
+        std::vector<int> cids;
+    };
+    std::vector<Bucket> buckets;
+
+    for (const auto& v : votes)
+    {
+        uint8_t key[32];
+        extractDigestKey(v, f, key);
+        bool found = false;
+        for (auto& b : buckets)
+        {
+            if (memcmp(b.key, key, 32) == 0)
+            {
+                b.cids.push_back(v.computorIndex);
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+        {
+            Bucket b;
+            memcpy(b.key, key, 32);
+            b.cids.push_back(v.computorIndex);
+            buckets.push_back(std::move(b));
+        }
+    }
+
+    std::vector<VoteGroup> groups;
+    groups.reserve(buckets.size());
+    for (auto& b : buckets)
+    {
+        std::sort(b.cids.begin(), b.cids.end());
+        VoteGroup g;
+        g.keyDisplay = formatDigestKey(f, b.key);
+        g.cids = std::move(b.cids);
+        groups.push_back(std::move(g));
+    }
+    std::sort(groups.begin(), groups.end(), [](const VoteGroup& a, const VoteGroup& b) {
+        return a.cids.size() > b.cids.size();
+    });
+    return groups;
+}
+
+// Run grouping on a set of votes across ALL digest fields and report splits.
+// Returns number of fields with >1 group.
+static int reportAllFieldSplits(const std::vector<Tick>& votes, const char* label)
+{
+    if (votes.empty())
+    {
+        LOG("  [%s] no votes -- skipping\n", label);
+        return 0;
+    }
+    LOG("  [%s] %zu votes\n", label, votes.size());
+    int splitsFound = 0;
+    for (int f = 0; f < DF_COUNT; ++f)
+    {
+        auto groups = groupByDigestField(votes, (DigestField)f);
+        size_t nGroups = groups.size();
+        size_t maxBucket = 0;
+        for (const auto& g : groups) if (g.cids.size() > maxBucket) maxBucket = g.cids.size();
+
+        if (nGroups == 1)
+        {
+            LOG("    %-35s : aligned  (1 group, size %zu)\n",
+                digestFieldName((DigestField)f), maxBucket);
+            continue;
+        }
+
+        splitsFound++;
+        LOG("    %-35s : SPLIT    (%zu groups)\n",
+            digestFieldName((DigestField)f), nGroups);
+        for (size_t gi = 0; gi < nGroups; ++gi)
+        {
+            const char* flag = "";
+            if (groups[gi].cids.size() >= 451) flag = "  [451+ aligned -- FINALIZED per quorum rule]";
+            LOG("      Group %zu: %s  count=%zu%s\n",
+                gi, groups[gi].keyDisplay.c_str(), groups[gi].cids.size(), flag);
+            // Print cids for top groups or small groups
+            if (gi < 4 || groups[gi].cids.size() <= 32)
+            {
+                LOG("        cids: ");
+                printCidList(groups[gi].cids);
+            }
+        }
+    }
+    return splitsFound;
+}
+
+// General vote-split diagnosis tool.
+//
+// Fetches votes for tick N and tick N+1, and for each tick groups the votes by every
+// directly-comparable digest field (prev*, transactionDigest, expectedNextTickTransactionDigest).
+// This surfaces splits on any consensus-relevant dimension:
+//
+//   Split visible at tick N's prevXxx  => divergence from a PRIOR tick (carried-over state)
+//   Split visible at tick N+1's prevXxx => divergence during tick N EXECUTION
+//   Split at tick N's transactionDigest => tick leader sent different tick data (double tick data)
+//   Split at tick N's expectedNextTickTransactionDigest => nodes disagree on tick N+1's tx set
+//
+// The tool also auto-checks the 451-alignment quorum rule per component, so the user knows
+// immediately which components are safe to force-empty vs which would erase finalized state.
+//
+// Optional hypothesis mode: if a RTD value is supplied, additionally computes
+// K12(pubkey_i || hypothesis, 4) for each computor and tests against their
+// saltedResourceTestingDigest in tick N. Useful when tick N+1 has no votes at all
+// (network stuck immediately after tick N) and the user has an externally-sourced RTD value.
+void checkVoteSalt(const char* nodeIp, const int nodePort, uint32_t requestedTick, const char* compFileName, bool hasHypothesis, uint32_t rtdHypothesis)
+{
+    auto qc = std::make_shared<QubicConnection>(nodeIp, nodePort);
+    BroadcastComputors bc;
+    {
+        FILE* f = fopen(compFileName, "rb");
+        if (!f)
+        {
+            LOG("Failed to open comp list file %s\n", compFileName);
+            return;
+        }
+        if (fread(&bc, 1, sizeof(BroadcastComputors), f) != sizeof(BroadcastComputors))
+        {
+            LOG("Failed to read comp list\n");
+            fclose(f);
+            return;
+        }
+        fclose(f);
+    }
+
+    // Fetch tick N votes
+    static struct
+    {
+        RequestResponseHeader header;
+        RequestedQuorumTick rqt;
+    } packet;
+    packet.header.setSize(sizeof(packet));
+    packet.header.randomizeDejavu();
+    packet.header.setType(RequestedQuorumTick::type);
+    packet.rqt.tick = requestedTick;
+    memset(packet.rqt.voteFlags, 0, (676 + 7) / 8);
+    qc->sendData(reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
+    auto votesN = qc->getLatestVectorPacketAs<Tick>();
+    LOG("Fetched %d votes for tick %u\n", (int)votesN.size(), requestedTick);
+
+    // Fetch tick N+1 votes
+    packet.header.randomizeDejavu();
+    packet.rqt.tick = requestedTick + 1;
+    memset(packet.rqt.voteFlags, 0, (676 + 7) / 8);
+    qc->sendData(reinterpret_cast<uint8_t*>(&packet), sizeof(packet));
+    auto votesNplus1 = qc->getLatestVectorPacketAs<Tick>();
+    LOG("Fetched %d votes for tick %u\n", (int)votesNplus1.size(), requestedTick + 1);
+
+    if (votesN.empty())
+    {
+        LOG("No votes for tick %u -- peer does not have this tick in storage\n", requestedTick);
+        return;
+    }
+
+    auto validN = filterValidVotes(votesN, bc, "tickN");
+    auto validNplus1 = filterValidVotes(votesNplus1, bc, "tickN+1");
+
+    // === Analysis 1: split detection at tick N ===
+    //   Tick N's prev* fields = state carried INTO tick N (result of prior tick's execution).
+    //   Tick N's transactionDigest = this tick's transaction set.
+    //   Tick N's expectedNextTickTransactionDigest = vote on next tick's tx set.
+    LOG("\n=== Analysis 1: Vote alignment at tick %u ===\n", requestedTick);
+    LOG("Splits in prev* fields = divergence BEFORE this tick (carried from prior tick's execution).\n");
+    LOG("Splits in transactionDigest = tick leader sent conflicting data, OR peers store different tick data.\n");
+    LOG("Splits in expectedNextTickTransactionDigest = nodes disagree on what the NEXT tick's txs should be.\n\n");
+    int splitsN = reportAllFieldSplits(validN, "tickN");
+
+    // === Analysis 2: split detection at tick N+1 ===
+    //   Tick N+1's prev* fields = state after processing tick N.
+    //   If these split, the divergence happened DURING tick N execution.
+    LOG("\n=== Analysis 2: Vote alignment at tick %u (post-execution state of tick %u) ===\n",
+        requestedTick + 1, requestedTick);
+    LOG("Splits in prev* fields here = divergence produced DURING tick %u's execution.\n\n", requestedTick);
+    int splitsNplus1 = 0;
+    if (validNplus1.empty())
+    {
+        LOG("  No valid tick %u votes -- cannot analyze post-execution state.\n", requestedTick + 1);
+        LOG("  This usually means the network is stuck at or before tick %u and no node has cast tick %u votes yet.\n",
+            requestedTick, requestedTick + 1);
+        if (!hasHypothesis)
+        {
+            LOG("  Fallback: supply an RTD hypothesis as a fourth argument to test saltedResourceTestingDigest manually.\n");
+            LOG("    qubic-cli ... -checkvotesalt <comp.dat> %u <rtd_value_as_uint32>\n", requestedTick);
+        }
+    }
+    else
+    {
+        splitsNplus1 = reportAllFieldSplits(validNplus1, "tickN+1");
+    }
+
+    // === Verdict ===
+    LOG("\n=== Diagnosis verdict ===\n");
+    if (splitsN == 0 && splitsNplus1 == 0)
+    {
+        LOG("Network is ALIGNED on all digest components at ticks %u and %u.\n",
+            requestedTick, requestedTick + 1);
+        LOG("If the network is stuck here anyway, the issue is not a state split -- check peer connectivity,\n");
+        LOG("computor liveness, and tick leader status via -getcurrenttick against multiple peers.\n");
+    }
+    else
+    {
+        LOG("SPLIT DETECTED: %d component(s) at tick %u, %d component(s) at tick %u\n",
+            splitsN, requestedTick, splitsNplus1, requestedTick + 1);
+        LOG("\nInterpretation guide:\n");
+        LOG("  - If splits appear in tick %u's PREV fields but not tick %u+1's prev fields -- prior state\n",
+            requestedTick, requestedTick);
+        LOG("    was already split before this tick. Scan backward to find where it started.\n");
+        LOG("  - If splits appear only in tick %u+1's prev fields -- divergence occurred DURING tick %u\n",
+            requestedTick, requestedTick);
+        LOG("    processing. Likely causes: different score computation, different contract execution,\n");
+        LOG("    different fee calculation, or custom operator modifications affecting state.\n");
+        LOG("  - If transactionDigest differs at tick %u -- the tick leader sent conflicting tick data\n",
+            requestedTick);
+        LOG("    (double tick data case), or peers received it in different orders.\n");
+        LOG("  - If expectedNextTickTransactionDigest differs -- nodes disagree on which tx set the next\n");
+        LOG("    tick should contain (usually a propagation race or faulty tick leader).\n");
+        LOG("\nQuorum safety rule: force-empty is SAFE only if NO split component has a 451+ aligned bucket.\n");
+        LOG("Any component flagged [451+ aligned -- FINALIZED per quorum rule] above must be preserved.\n");
+    }
+
+    // === Optional: hypothesis mode (for saltedResourceTestingDigest in tick N) ===
+    if (hasHypothesis)
+    {
+        LOG("\n=== Analysis 3: RTD hypothesis check ===\n");
+        LOG("Testing hypothesis RTD = %u (0x%08x) against tick %u saltedResourceTestingDigest.\n",
+            rtdHypothesis, rtdHypothesis, requestedTick);
+
+        std::vector<int> matchCids;
+        std::vector<int> mismatchCids;
+        matchCids.reserve(validN.size());
+        mismatchCids.reserve(validN.size());
+
+        for (const auto& v : validN)
+        {
+            uint8_t saltedData[36];
+            memset(saltedData, 0, sizeof(saltedData));
+            memcpy(saltedData, bc.computors.publicKeys[v.computorIndex], 32);
+            memcpy(saltedData + 32, &rtdHypothesis, 4);
+            uint8_t expectedSalt[4];
+            KangarooTwelve(saltedData, 36, expectedSalt, 4);
+            uint32_t expectedU32;
+            memcpy(&expectedU32, expectedSalt, 4);
+            if (expectedU32 == v.saltedResourceTestingDigest)
+            {
+                matchCids.push_back(v.computorIndex);
+            }
+            else
+            {
+                mismatchCids.push_back(v.computorIndex);
+            }
+        }
+        std::sort(matchCids.begin(), matchCids.end());
+        std::sort(mismatchCids.begin(), mismatchCids.end());
+
+        LOG("  Matches hypothesis : %zu computors\n", matchCids.size());
+        LOG("  Does NOT match     : %zu computors\n", mismatchCids.size());
+        if (!matchCids.empty())
+        {
+            LOG("  Matching cids: ");
+            printCidList(matchCids);
+        }
+        if (!mismatchCids.empty())
+        {
+            LOG("  Mismatching cids: ");
+            printCidList(mismatchCids);
+        }
+    }
+
+    LOG("\n=== Summary ===\n");
+    LOG("Valid tick %u votes: %zu / %d    Missing: %d\n",
+        requestedTick, validN.size(), NUMBER_OF_COMPUTORS,
+        NUMBER_OF_COMPUTORS - (int)validN.size());
+    LOG("Valid tick %u votes: %zu / %d    Missing: %d\n",
+        requestedTick + 1, validNplus1.size(), NUMBER_OF_COMPUTORS,
+        NUMBER_OF_COMPUTORS - (int)validNplus1.size());
+    LOG("\nTip: cross-check against multiple peers. Peers on different sides of a split may see\n");
+    LOG("different vote sets for the same tick. Run this command against 3-5 public peers and\n");
+    LOG("compare the bucket distributions. Agreement across peers = real split. Disagreement =\n");
+    LOG("propagation still in flight, wait a few seconds and retry.\n");
+}
+
 void getTickDataToFile(const char* nodeIp, const int nodePort, uint32_t requestedTick, const char* fileName)
 {
     auto qc = std::make_shared<QubicConnection>(nodeIp, nodePort);
