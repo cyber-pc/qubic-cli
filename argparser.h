@@ -140,6 +140,10 @@ void print_help()
 
     printf("\n[NODE COMMANDS]\n");
     printf("\t-getcurrenttick\n");
+    printf("\t-getantepochcontext\n");
+    printf("\t\tPrint the ant-colony epoch context (threshold, freshness window, child cap, ...). Node ip/port required.\n");
+    printf("\t-getanttree <IDENTITY>\n");
+    printf("\t\tPage and print IDENTITY's ant-colony tree. Operator-signed: -seed must be the node operator's seed.\n");
     printf("\t\tShow current tick information of a node\n");
     printf("\t-sendspecialcommand <COMMAND_IN_NUMBER> \n");
     printf("\t\tPerform a special command to node, valid seed and node ip/port are required.\t\n");
@@ -1074,6 +1078,22 @@ void parseArgument(int argc, char** argv)
         {
             g_cmd = GET_CURRENT_TICK;
             i++;
+            CHECK_OVER_PARAMETERS
+            break;
+        }
+        if (strcmp(argv[i], "-getantepochcontext") == 0)
+        {
+            g_cmd = GET_ANT_EPOCH_CONTEXT;
+            i++;
+            CHECK_OVER_PARAMETERS
+            break;
+        }
+        if (strcmp(argv[i], "-getanttree") == 0)
+        {
+            CHECK_NUMBER_OF_PARAMETERS(1)
+            g_cmd = GET_ANT_IDENTITY_TREE;
+            g_requestedIdentity = argv[i + 1];
+            i += 2;
             CHECK_OVER_PARAMETERS
             break;
         }
