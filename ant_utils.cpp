@@ -19,10 +19,19 @@
 #include "k12_and_key_utils.h"
 #include "logger.h"
 #include "utils.h"
+#include "node_utils.h"
+#include "wallet_utils.h"
 #include "ant_utils.h"
 
 static constexpr uint32_t ROOT_TICK_OFFSET = 0u;
 static constexpr uint32_t ROOT_INDEX_IN_TICK = 0xFFFFFFFFu;
+
+// Mirrors core: ANT_COLONY_MINING_SOLUTION_INPUT_TYPE (mining.h) and SOLUTION_SECURITY_DEPOSIT
+// (public_settings.h). MAX_ANCHOR_WALK_BACK matches AntMiner's resolveAnchorDigest bound.
+static constexpr uint16_t ANT_SOLUTION_TX_TYPE = 12u;
+static constexpr uint64_t ANT_SOLUTION_DEPOSIT = 1000000ull;
+static constexpr uint32_t MAX_ANCHOR_WALK_BACK = 16u;
+
 using Ref = std::pair<uint32_t, uint32_t>;
 
 // --- epoch context (public) ---
@@ -240,8 +249,8 @@ void printAntIdentityTree(const char* nodeIp, int nodePort, const char* identity
                 line[off++] = ' ';
                 line[off++] = ' ';
             }
-            snprintf(line + off, sizeof(line) - off, "[%u] d%u kids=%u anchor=%u%s%s",
-                n.score, n.depth, n.childCount, n.anchorTick,
+            snprintf(line + off, sizeof(line) - off, "[%u] d%u kids=%u ref=%u:%u anchor=%u%s%s",
+                n.score, n.depth, n.childCount, n.selfTick, n.selfSolutionIndexInTick, n.anchorTick,
                 (cap && n.childCount >= cap) ? "  FULL" : "",
                 (idx == best) ? "  * best" : "");
             LOG("%s\n", line);
@@ -249,4 +258,64 @@ void printAntIdentityTree(const char* nodeIp, int nodePort, const char* identity
         }
     };
     walk(Ref(ROOT_TICK_OFFSET, ROOT_INDEX_IN_TICK), 1);
+}
+
+void sendAntSolution(const char* nodeIp, int nodePort, const char* seed,
+    const uint8_t nonce[32], uint32_t claimedScore,
+    uint32_t parentTick, uint32_t parentIndex, uint32_t scheduledTickOffset)
+{
+    QCPtr qc = make_qc(nodeIp, nodePort);
+
+    const uint32_t currentTick = getTickNumberFromNode(qc);
+    if (currentTick == 0)
+    {
+        LOG("Could not read current tick from node.\n");
+        return;
+    }
+
+    // The node records an anchor digest only for non-empty ticks, so an empty anchor is rejected as
+    // stale. Walk back from currentTick-1 to the nearest tick the node holds TickData for - the same
+    // approach AntMiner uses. getTickData zeroes result (result.tick == 0) for an empty tick.
+    uint32_t anchorTick = 0;
+    const uint32_t fromTick = currentTick - 1;
+    TickData td;
+    for (uint32_t tick = fromTick; tick > 0 && (fromTick - tick) < MAX_ANCHOR_WALK_BACK; tick--)
+    {
+        if (getTickData(qc, tick, td) && td.tick == tick)
+        {
+            anchorTick = tick;
+            break;
+        }
+    }
+    if (anchorTick == 0)
+    {
+        LOG("No non-empty tick found in the last %u ticks to anchor to; retry once the network has activity.\n",
+            MAX_ANCHOR_WALK_BACK);
+        return;
+    }
+
+    // 48-byte payload matching AntColonyMiningSolutionTransaction's input:
+    // parentTick | parentSolutionIndexInTick | anchorTick | claimedScore | nonce.
+    uint8_t payload[48];
+    memcpy(payload + 0, &parentTick, 4);
+    memcpy(payload + 4, &parentIndex, 4);
+    memcpy(payload + 8, &anchorTick, 4);
+    memcpy(payload + 12, &claimedScore, 4);
+    memcpy(payload + 16, nonce, 32);
+
+    // dest = the zero-pubkey identity
+    uint8_t zeroPub[32] = {0};
+    char zeroId[128] = {0};
+    getIdentityFromPublicKey(zeroPub, zeroId, false);
+
+    char nonceHex[65] = {0};
+    byteToHex(nonce, nonceHex, 32);
+    LOG("Ant solution -> anchor %u (%u back), parent %s, claimedScore %u, nonce %s\n",
+        anchorTick, fromTick - anchorTick,
+        (parentIndex == ROOT_INDEX_IN_TICK) ? "ROOT" : "node",
+        claimedScore, nonceHex);
+
+    uint32_t scheduledTick = 0;
+    makeCustomTransaction(nodeIp, nodePort, seed, zeroId,
+        ANT_SOLUTION_TX_TYPE, ANT_SOLUTION_DEPOSIT, 48, payload, scheduledTickOffset, &scheduledTick);
 }

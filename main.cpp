@@ -50,6 +50,12 @@ int run(int argc, char* argv[])
             sanityCheckNode(g_nodeIp, g_nodePort);
             printAntIdentityTree(g_nodeIp, g_nodePort, g_requestedIdentity, g_seed);
             break;
+        case SEND_ANT_SOLUTION:
+            sanityCheckNode(g_nodeIp, g_nodePort);
+            sanityCheckSeed(g_seed);
+            sendAntSolution(g_nodeIp, g_nodePort, g_seed, g_antNonce, g_antClaimedScore,
+                            g_antParentTick, g_antParentIndex, g_offsetScheduledTick);
+            break;
         case GET_SYSTEM_INFO:
             sanityCheckNode(g_nodeIp, g_nodePort);
             printSystemInfoFromNode(g_nodeIp, g_nodePort);
